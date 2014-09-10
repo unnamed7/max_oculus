@@ -24,3 +24,6 @@
 *.pbxuser
 *.DS_Store
 *.user
+
+build
+.DS_Store
