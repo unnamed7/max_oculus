@@ -5,16 +5,16 @@ Content     :   Stereo rendering functions
 Created     :   November 30, 2013
 Authors     :   Tom Fosyth
 
-Copyright   :   Copyright 2014 Oculus VR, Inc. All Rights reserved.
+Copyright   :   Copyright 2014 Oculus VR, LLC All Rights reserved.
 
-Licensed under the Oculus VR Rift SDK License Version 3.1 (the "License"); 
+Licensed under the Oculus VR Rift SDK License Version 3.2 (the "License"); 
 you may not use the Oculus VR Rift SDK except in compliance with the License, 
 which is provided at the time of installation or download, or which 
 otherwise accompanies this software in either electronic or hard copy form.
 
 You may obtain a copy of the License at
 
-http://www.oculusvr.com/licenses/LICENSE-3.1 
+http://www.oculusvr.com/licenses/LICENSE-3.2 
 
 Unless required by applicable law or agreed to in writing, the Oculus VR SDK 
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -643,6 +643,8 @@ HMDInfo CreateDebugHMDInfo(HmdTypeEnum hmdType)
         info.ScreenGapSizeInMeters                  = 0.0f;
         info.CenterFromTopInMeters                  = 0.0468f;
         info.LensSeparationInMeters                 = 0.0635f;
+        info.PelOffsetR                             = Vector2f ( 0.0f, 0.0f );
+        info.PelOffsetB                             = Vector2f ( 0.0f, 0.0f );
         info.Shutter.Type                           = HmdShutter_RollingTopToBottom;
         info.Shutter.VsyncToNextVsync               = ( 1.0f / 60.0f );
         info.Shutter.VsyncToFirstScanline           = 0.000052f;
@@ -658,6 +660,8 @@ HMDInfo CreateDebugHMDInfo(HmdTypeEnum hmdType)
         info.ScreenGapSizeInMeters                  = 0.0f;
         info.CenterFromTopInMeters                  = info.ScreenSizeInMeters.h * 0.5f;
         info.LensSeparationInMeters                 = 0.0635f;
+        info.PelOffsetR                             = Vector2f ( 0.0f, 0.0f );
+        info.PelOffsetB                             = Vector2f ( 0.0f, 0.0f );
         info.Shutter.Type                           = HmdShutter_RollingRightToLeft;
         info.Shutter.VsyncToNextVsync               = ( 1.0f / 76.0f );
         info.Shutter.VsyncToFirstScanline           = 0.0000273f;
@@ -673,6 +677,8 @@ HMDInfo CreateDebugHMDInfo(HmdTypeEnum hmdType)
         info.ScreenGapSizeInMeters                  = 0.0f;
         info.CenterFromTopInMeters                  = info.ScreenSizeInMeters.h * 0.5f;
         info.LensSeparationInMeters                 = 0.0635f;
+        info.PelOffsetR                             = Vector2f ( 0.5f, 0.5f );
+        info.PelOffsetB                             = Vector2f ( 0.5f, 0.5f );
         info.Shutter.Type                           = HmdShutter_RollingRightToLeft;
         info.Shutter.VsyncToNextVsync               = ( 1.0f / 76.0f );
         info.Shutter.VsyncToFirstScanline           = 0.0000273f;
@@ -688,15 +694,17 @@ HMDInfo CreateDebugHMDInfo(HmdTypeEnum hmdType)
     return info;
 }
 
-// profile may be NULL, in which case it uses the hard-coded defaults.
+
 HmdRenderInfo GenerateHmdRenderInfoFromHmdInfo ( HMDInfo const &hmdInfo,
-                                                 Profile const *profile /*=NULL*/,
+                                                 Profile const *profile,
                                                  DistortionEqnType distortionType /*= Distortion_CatmullRom10*/,
                                                  EyeCupType eyeCupOverride /*= EyeCup_LAST*/ )
 {
-    OVR_ASSERT(profile);  // profiles are required
-    
     HmdRenderInfo renderInfo;
+    
+    OVR_ASSERT(profile);  // profiles are required
+    if(!profile)
+        return renderInfo;
 
     renderInfo.HmdType                              = hmdInfo.HmdType;
     renderInfo.ResolutionInPixels                   = hmdInfo.ResolutionInPixels;
@@ -704,6 +712,8 @@ HmdRenderInfo GenerateHmdRenderInfoFromHmdInfo ( HMDInfo const &hmdInfo,
     renderInfo.CenterFromTopInMeters                = hmdInfo.CenterFromTopInMeters;
     renderInfo.ScreenGapSizeInMeters                = hmdInfo.ScreenGapSizeInMeters;
     renderInfo.LensSeparationInMeters               = hmdInfo.LensSeparationInMeters;
+    renderInfo.PelOffsetR                           = hmdInfo.PelOffsetR;
+    renderInfo.PelOffsetB                           = hmdInfo.PelOffsetB;
 
     OVR_ASSERT ( sizeof(renderInfo.Shutter) == sizeof(hmdInfo.Shutter) );   // Try to keep the files in sync!
     renderInfo.Shutter.Type                         = hmdInfo.Shutter.Type;
@@ -913,9 +923,10 @@ LensConfig GenerateLensConfigFromEyeRelief ( float eyeReliefInMeters, HmdRenderI
 	DistortionDescriptor distortions[MaxDistortions];
 	for (int i = 0; i < MaxDistortions; i++)
     {
-        distortions[i].Config.SetToIdentity(); // Note: This line causes a false static analysis error -cat
         distortions[i].EyeRelief = 0.0f;
+        memset(distortions[i].SampleRadius, 0, sizeof(distortions[i].SampleRadius));
         distortions[i].MaxRadius = 1.0f;
+        distortions[i].Config.SetToIdentity(); // Note: This line causes a false Microsoft static analysis error -cat
     }
     int numDistortions = 0;
     int defaultDistortion = 0;     // index of the default distortion curve to use if zero eye relief supplied
@@ -1080,7 +1091,7 @@ LensConfig GenerateLensConfigFromEyeRelief ( float eyeReliefInMeters, HmdRenderI
         distortions[numDistortions].Config.K[9]                          = 1.31f;
         distortions[numDistortions].Config.K[10]                         = 1.38f;
         distortions[numDistortions].MaxRadius                            = 1.0f;
-        
+
         distortions[numDistortions].Config.ChromaticAberration[0]        = -0.015f;
         distortions[numDistortions].Config.ChromaticAberration[1]        = -0.02f;
         distortions[numDistortions].Config.ChromaticAberration[2]        =  0.025f;
@@ -1221,7 +1232,8 @@ LensConfig GenerateLensConfigFromEyeRelief ( float eyeReliefInMeters, HmdRenderI
         fitY[0] = 1.0f;
         for ( int ctrlPt = 1; ctrlPt < 4; ctrlPt ++ )
         {
-            float radiusLerp = invLerpVal * pLower->SampleRadius[ctrlPt-1] + lerpVal * pUpper->SampleRadius[ctrlPt-1];
+            // SampleRadius is not valid for Distortion_RecipPoly4 types.
+            float radiusLerp = ( invLerpVal * pLower->MaxRadius + lerpVal * pUpper->MaxRadius ) * ( (float)ctrlPt / 4.0f );
             float radiusLerpSq = radiusLerp * radiusLerp;
             float fitYLower = pLower->Config.DistortionFnScaleRadiusSquared ( radiusLerpSq );
             float fitYUpper = pUpper->Config.DistortionFnScaleRadiusSquared ( radiusLerpSq );
@@ -1477,7 +1489,7 @@ FovPort GetPhysicalScreenFov ( StereoEye eyeType, DistortionRenderDesc const &di
     struct FunctionHider
     {
         static FovPort FindRange ( Vector2f from, Vector2f to, int numSteps,
-                                          DistortionRenderDesc const &distortion )
+                                          DistortionRenderDesc const &distortionL )
         {
             FovPort result;
             result.UpTan    = 0.0f;
@@ -1490,7 +1502,7 @@ FovPort GetPhysicalScreenFov ( StereoEye eyeType, DistortionRenderDesc const &di
             {
                 float    lerpFactor  = stepScale * (float)step;
                 Vector2f sample      = from + (to - from) * lerpFactor;
-                Vector2f tanEyeAngle = TransformScreenNDCToTanFovSpace ( distortion, sample );
+                Vector2f tanEyeAngle = TransformScreenNDCToTanFovSpace ( distortionL, sample );
 
                 result.LeftTan  = Alg::Max ( result.LeftTan,  -tanEyeAngle.x );
                 result.RightTan = Alg::Max ( result.RightTan,  tanEyeAngle.x );

@@ -8,16 +8,16 @@ Content     :   Contains atomic operations and inline fastest locking
 Created     :   September 19, 2012
 Notes       : 
 
-Copyright   :   Copyright 2014 Oculus VR, Inc. All Rights reserved.
+Copyright   :   Copyright 2014 Oculus VR, LLC All Rights reserved.
 
-Licensed under the Oculus VR Rift SDK License Version 3.1 (the "License"); 
+Licensed under the Oculus VR Rift SDK License Version 3.2 (the "License"); 
 you may not use the Oculus VR Rift SDK except in compliance with the License, 
 which is provided at the time of installation or download, or which 
 otherwise accompanies this software in either electronic or hard copy form.
 
 You may obtain a copy of the License at
 
-http://www.oculusvr.com/licenses/LICENSE-3.1 
+http://www.oculusvr.com/licenses/LICENSE-3.2 
 
 Unless required by applicable law or agreed to in writing, the Oculus VR SDK 
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -33,7 +33,7 @@ limitations under the License.
 #include "OVR_Types.h"
 
 // Include System thread functionality.
-#if defined(OVR_OS_WIN32)
+#if defined(OVR_OS_MS) && !defined(OVR_OS_MS_MOBILE)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -101,7 +101,7 @@ class Lock;
 
 struct AtomicOpsRawBase
 {
-#if !defined(OVR_ENABLE_THREADS) || defined(OVR_CPU_X86) || defined(OVR_OS_WIN32) || defined(OVR_OS_IPHONE)
+#if !defined(OVR_ENABLE_THREADS) || defined(OVR_CPU_X86) || defined(OVR_CPU_X86_64)
     // Need to have empty constructor to avoid class 'unused' variable warning.
     struct FullSync { inline FullSync() { } };
     struct AcquireSync { inline AcquireSync() { } };
@@ -117,7 +117,7 @@ struct AtomicOpsRawBase
     struct AcquireSync { inline AcquireSync() { } ~AcquireSync() { asm volatile("sync\n"); } };
     struct ReleaseSync { inline ReleaseSync() { asm volatile("sync\n"); } };
 
-#elif defined(OVR_CPU_ARM)
+#elif defined(OVR_CPU_ARM) // Includes Android and iOS.
     struct FullSync { inline FullSync() { asm volatile("dmb\n"); } ~FullSync() { asm volatile("dmb\n"); } };
     struct AcquireSync { inline AcquireSync() { } ~AcquireSync() { asm volatile("dmb\n"); } };
     struct ReleaseSync { inline ReleaseSync() { asm volatile("dmb\n"); } };
@@ -141,7 +141,7 @@ struct AtomicOpsRaw_4ByteImpl : public AtomicOpsRawBase
 
     // *** Thread - Safe Atomic Versions.
 
-#elif defined(OVR_OS_WIN32) 
+#elif defined(OVR_OS_MS) 
 
     // Use special defined for VC6, where volatile is not used and
     // InterlockedCompareExchange is declared incorrectly.
@@ -406,7 +406,7 @@ struct AtomicOpsRaw_8ByteImpl : public AtomicOpsRawBase
     typedef uint64_t T;
 
     // *** Thread - Safe OS specific versions.
-#elif defined(OVR_OS_WIN32)
+#elif defined(OVR_OS_MS)
 
     // This is only for 64-bit systems.
     typedef LONG64      T;
@@ -605,11 +605,15 @@ public:
     inline static C     ExchangeAdd_NoSync(volatile C* p, C val)        { C2T_union u; u.c = val; u.t = Ops::ExchangeAdd_NoSync((PT)p, u.t); return u.c; }
     inline static bool  CompareAndSet_Sync(volatile C* p, C c, C val)   { C2T_union u,cu; u.c = val; cu.c = c; return Ops::CompareAndSet_Sync((PT)p, cu.t, u.t); }
     inline static bool  CompareAndSet_Release(volatile C* p, C c, C val){ C2T_union u,cu; u.c = val; cu.c = c; return Ops::CompareAndSet_Release((PT)p, cu.t, u.t); }
-    inline static bool  CompareAndSet_Relse(volatile C* p, C c, C val){ C2T_union u,cu; u.c = val; cu.c = c; return Ops::CompareAndSet_Acquire((PT)p, cu.t, u.t); }
+    inline static bool  CompareAndSet_Acquire(volatile C* p, C c, C val){ C2T_union u,cu; u.c = val; cu.c = c; return Ops::CompareAndSet_Acquire((PT)p, cu.t, u.t); }
     inline static bool  CompareAndSet_NoSync(volatile C* p, C c, C val) { C2T_union u,cu; u.c = val; cu.c = c; return Ops::CompareAndSet_NoSync((PT)p, cu.t, u.t); }
+
     // Loads and stores with memory fence. These have only the relevant versions.    
     inline static void  Store_Release(volatile C* p, C val)             { C2T_union u; u.c = val; Ops::Store_Release((PT)p, u.t); }    
     inline static C     Load_Acquire(const volatile C* p)               { C2T_union u; u.t = Ops::Load_Acquire((PT)p); return u.c; }
+
+    // Deprecated typo error:
+    inline static bool  CompareAndSet_Relse(volatile C* p, C c, C val){ C2T_union u,cu; u.c = val; cu.c = c; return Ops::CompareAndSet_Acquire((PT)p, cu.t, u.t); }
 };
 
 
@@ -638,7 +642,7 @@ public:
     inline T     Exchange_NoSync(T val)             { return Ops::Exchange_NoSync(&Value, val); }
     inline bool  CompareAndSet_Sync(T c, T val)     { return Ops::CompareAndSet_Sync(&Value, c, val); }
     inline bool  CompareAndSet_Release(T c, T val)  { return Ops::CompareAndSet_Release(&Value, c, val); }
-    inline bool  CompareAndSet_Acquire(T c, T val)  { return Ops::CompareAndSet_Relse(&Value, c, val); }
+    inline bool  CompareAndSet_Acquire(T c, T val)  { return Ops::CompareAndSet_Acquire(&Value, c, val); }
     inline bool  CompareAndSet_NoSync(T c, T val)   { return Ops::CompareAndSet_NoSync(&Value, c, val); }
     // Load & Store.
     inline void  Store_Release(T val)               { Ops::Store_Release(&Value, val); }
@@ -837,11 +841,11 @@ public:
     inline void Unlock() { }
 
    // Windows.   
-#elif defined(OVR_OS_WIN32)
+#elif defined(OVR_OS_MS)
 
     CRITICAL_SECTION cs;
 public:   
-    Lock(unsigned spinCount = 0);      
+    Lock(unsigned spinCount = 10000);   // Mutexes with non-zero spin counts usually result in better performance.
     ~Lock();
     // Locking functions.
     inline void DoLock()    { ::EnterCriticalSection(&cs); }
@@ -854,9 +858,9 @@ public:
     static pthread_mutexattr_t RecursiveAttr;
     static bool                RecursiveAttrInit;
 
-    Lock (unsigned dummy = 0)
+    Lock (unsigned spinCount = 0) // To do: Support spin count, probably via a custom lock implementation.
     {
-        OVR_UNUSED(dummy);
+        OVR_UNUSED(spinCount);
         if (!RecursiveAttrInit)
         {
             pthread_mutexattr_init(&RecursiveAttr);
